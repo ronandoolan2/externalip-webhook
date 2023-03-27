@@ -85,16 +85,14 @@ func (sv *ServiceValidator) Handle(ctx context.Context, req admission.Request) a
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-
-	if len(svc.Spec.ExternalIPs) > 0 && !sv.isValidUser(req.UserInfo) {
-		failedRequestsCount.Inc()
-		reason := fmt.Sprintf("user %s is not alllowed to specify externalIP", req.UserInfo.Username)
+        if svc.Spec.Type == corev1.ServiceTypeLoadBalancer {
+		reason := fmt.Sprintf("No load balancers allowed")
 		response := admission.Denied(reason)
 		response.AuditAnnotations = map[string]string{"error": reason}
 		return response
 	}
 
-	return sv.validateExternalIPs(svc.Spec.ExternalIPs)
+	return sv.validateService()
 }
 
 // InjectDecoder injects decoder into ServiceValidator
@@ -104,27 +102,7 @@ func (sv *ServiceValidator) InjectDecoder(d *admission.Decoder) error {
 }
 
 // validateExternalIPs validates if external IP specified in the service is allowed or not
-func (sv *ServiceValidator) validateExternalIPs(externalIPsInSpec []string) admission.Response {
-
-	for _, externalIP := range externalIPsInSpec {
-		var found bool
-		ip := net.ParseIP(externalIP)
-		if ip == nil {
-			failedRequestsCount.Inc()
-			return buildDeniedResponse(externalIP, "externalIP specified is not valid")
-		}
-
-		for _, externalIPNet := range sv.allowedExternalIPNets {
-			if externalIPNet.Contains(ip) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			failedRequestsCount.Inc()
-			return buildDeniedResponse(externalIP, "externalIP specified is not allowed to use")
-		}
-	}
+func (sv *ServiceValidator) validateService() admission.Response {
 
 	return admission.Allowed("passed svc spec validation")
 }
